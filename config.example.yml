@@ -1,0 +1,12 @@
+discord:
+  token: ''
+  # discord right click on a channel -> "copy channel id"
+  channel_id: ''
+
+grantee_mnemonic: 'never gonna give you up never gonna let you down'
+
+chains:
+  - name: 'stargaze'
+    rpc: 'https://stargaze-rpc.nysa.network:443'
+    granted_address: 'stars1xxxx'
+    gas: '0.25ustars'
