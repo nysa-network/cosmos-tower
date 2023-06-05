@@ -3,6 +3,10 @@
 *.log
 tmp/
 config.yml
+cosmos-tower.db.json
+build
+/cosmos-tower
+/dist
 
 *.tern-port
 node_modules/

@@ -1,4 +1,5 @@
 export interface Config {
+  database: string;
   discord: {
     channel_id: string;
     token: string;

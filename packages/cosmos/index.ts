@@ -1,5 +1,3 @@
-import axios from "axios";
-
 import { bech32 } from "bech32";
 
 import { DirectSecp256k1HdWallet } from "@cosmjs/proto-signing";
@@ -9,20 +7,16 @@ import {
   setupGovExtension,
   GasPrice,
   SigningStargateClient,
-  calculateFee,
 } from "@cosmjs/stargate";
 
 import {
   ProposalStatus,
   TextProposal,
   Proposal,
-  Vote,
   VoteOption,
 } from "cosmjs-types/cosmos/gov/v1beta1/gov";
 import * as gov_v1beta1tx from "cosmjs-types/cosmos/gov/v1beta1/tx";
-import * as authztx from "cosmjs-types/cosmos/authz/v1beta1/tx";
-
-import { Any } from "cosmjs-types/google/protobuf/any";
+import { AccountData } from "@cosmjs/launchpad";
 
 export interface Config {
   name: string;
@@ -58,11 +52,13 @@ export class CosmosChain {
   async get_proposals(): Promise<Proposal[]> {
     var tmClient = await Tendermint34Client.connect(this.rpc_endpoint);
     const qclient = QueryClient.withExtensions(tmClient, setupGovExtension);
+    // @ts-ignore
     const { proposals, pagination } = await qclient.gov.proposals(
       ProposalStatus.PROPOSAL_STATUS_VOTING_PERIOD,
       "",
       ""
     );
+    // TODO: iterate over pagination
 
     return proposals.map((proposal: Proposal) => ({
       ...proposal,
@@ -72,16 +68,20 @@ export class CosmosChain {
 
   // @vote
   async vote(proposalId: Long, vote: VoteOption) {
-    const MNEMONIC =
-      "blast acquire powder bullet atom easily pipe bone exact nuclear august crystal segment abstract subway public chunk quote monster robust bundle own friend crime";
-    const addr = "stars13lxkjj7959yda7xqrlrf07zenmgrezheypxzvs";
+    // const addr = "stars13lxkjj7959yda7xqrlrf07zenmgrezheypxzvs";
 
-    const signer = await DirectSecp256k1HdWallet.fromMnemonic(MNEMONIC, {
-      prefix: this.prefix,
-    });
+    const signer = await DirectSecp256k1HdWallet.fromMnemonic(
+      this.grantee_mnemonic,
+      {
+        prefix: this.prefix,
+      }
+    );
 
-    // const accounts = await signer.getAccounts()
-    // console.log("accounts ", accounts)
+    // TODO: check if enough token to vote
+    const accounts = await signer.getAccounts();
+    const addr = accounts.find((acc: AccountData) =>
+      acc.address.startsWith(this.prefix)
+    )!;
 
     const client = await SigningStargateClient.connectWithSigner(
       this.rpc_endpoint,
@@ -94,13 +94,13 @@ export class CosmosChain {
     let msgVote: gov_v1beta1tx.MsgVote = gov_v1beta1tx.MsgVote.fromPartial({
       proposalId: proposalId,
       voter: this.voter_address,
-      option: VoteOption.VOTE_OPTION_YES,
+      option: vote,
     });
 
     const msg = {
       typeUrl: "/cosmos.authz.v1beta1.MsgExec",
       value: {
-        grantee: addr,
+        grantee: addr.address,
         msgs: [
           {
             typeUrl: "/cosmos.gov.v1beta1.MsgVote",
@@ -111,7 +111,7 @@ export class CosmosChain {
     };
 
     const resp = await client.signAndBroadcast(
-      addr,
+      addr.address,
       [msg as any],
       "auto",
       `Voted using https://github.com/nysa-network/cosmos-tower`

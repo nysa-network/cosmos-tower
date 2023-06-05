@@ -1,6 +1,5 @@
-import { Config, Chain, CosmosProposal } from "./types";
+import { Config, CosmosProposal } from "./types";
 import { CosmosChain } from "../cosmos";
-import { CosmosDiscord } from "../discord";
 
 import Long from "long";
 
@@ -11,12 +10,13 @@ import {
   Events,
   TextChannel,
 } from "discord.js";
+import { TowerDB } from "./database";
 
 let VoteMap = new Map<string, VoteOption>([
   ["VOTE_YES", VoteOption.VOTE_OPTION_YES],
   ["VOTE_NO", VoteOption.VOTE_OPTION_NO],
   ["VOTE_ABSTAIN", VoteOption.VOTE_OPTION_ABSTAIN],
-  ["VOTE_NO_WITH_VETO", VoteOption.VOTE_OPTION_NO_WITH_VETO],
+  ["VOTE_NWV", VoteOption.VOTE_OPTION_NO_WITH_VETO],
 ]);
 
 export class Tower {
@@ -24,10 +24,13 @@ export class Tower {
 
   chains: CosmosChain[];
   discord: DiscordClient;
+  towerDB: TowerDB;
 
   constructor(cfg: Config) {
     this.config = cfg;
     this.chains = [];
+    this.towerDB = new TowerDB(cfg.database);
+    this.towerDB.load();
 
     for (let chain of cfg.chains) {
       let c = new CosmosChain({
@@ -59,8 +62,8 @@ export class Tower {
     // let [chain_id, prop_id, vote_str] = interaction.customId.split(";");
     let custom_ids: string[] = interaction.customId.split(";");
     const chain_id = custom_ids[0];
-    const prop_id = Long.fromString(custom_ids[1]);
-    const vote = VoteMap.get(custom_ids[2])!;
+    const prop_id = Long.fromString(custom_ids[1]!)!;
+    const vote = VoteMap.get(custom_ids[2]!)!;
 
     const chain = this.chains.find((c: CosmosChain) => c.chain_id == chain_id);
     if (!chain) {
@@ -68,40 +71,61 @@ export class Tower {
       return;
     }
     await interaction.deferReply();
-    const resp = await chain.vote(prop_id as Long, vote);
 
-    await interaction.message.react("🆗");
+    try {
+      const resp = await chain.vote(prop_id as Long, vote);
 
-    await interaction.editReply({
-      content: `Voted! see tx: ${resp.transactionHash}`,
-    });
+      await interaction.message.fetch();
+      await interaction.message.react("🆗");
 
-    // await interaction.reply({ content: `Voted! see tx: ` });
+      await interaction.editReply({
+        content: `Voted! see tx: ${resp.transactionHash}`,
+      });
+    } catch (err) {
+      console.error(
+        `[ERROR] failed to vote on ${chain_id} #${prop_id}:\n${err}`
+      );
+      await interaction.editReply({
+        content: `[ERROR] Failed to vote: ${err}`,
+      });
+    }
   }
 
   async start() {
     await this.init();
 
-    for (const chain of this.chains) {
-      const proposals = await chain.get_proposals();
+    while (true) {
+      for (const chain of this.chains) {
+        const proposals = await chain.get_proposals();
 
-      for (const p of proposals) {
-        let content: TextProposal | undefined =
-          p.content as any as TextProposal;
-        console.log(`[PROPOSAL] #${p.proposalId} - ${content.title}`);
-        // console.log(`[PROPOSAL] #${p.proposalId} - ${content.title}\n${content.description}`)
+        for (const p of proposals) {
+          // check if already voted
+          console.log(`[DEBUG] ${chain.chain_id} #${p.proposalId}`);
+          if (this.towerDB.contain(chain.chain_id, p.proposalId.toNumber())) {
+            continue;
+          }
 
-        await this.NewProposal({
-          proposal_id: p.proposalId,
-          chain_id: chain.chain_id,
-          chain_name: chain.name,
+          let content: TextProposal = p.content! as any as TextProposal;
+          console.log(
+            `[PROPOSAL] ${chain.chain_id} #${p.proposalId} - ${content.title}`
+          );
+          // console.log(`[PROPOSAL] #${p.proposalId} - ${content.title}\n${content.description}`)
 
-          title: content?.title,
-          description: content?.description,
-        });
-        // await c.vote(p.proposalId)
-        break;
+          await this.NewProposal({
+            proposal_id: p.proposalId,
+            chain_id: chain.chain_id,
+            chain_name: chain.name,
+
+            title: content?.title,
+            description: content?.description,
+          });
+
+          this.towerDB.add_proposal(chain.chain_id, p.proposalId.toNumber());
+          this.towerDB.store();
+        }
       }
+      // Sleep 60 seconds
+      await new Promise((f) => setTimeout(f, 60 * 1000));
     }
   }
 
@@ -152,9 +176,10 @@ export class Tower {
       this.config.discord.channel_id
     )) as TextChannel;
 
+    if (msg.content.length >= 2000) {
+      // TODO(albttx): DO BETTER
+      msg.content = msg.content.substring(0, 2000);
+    }
     channel.send(msg);
-    console.log(channel);
-    // const resp = await this.client.send(msg)
-    // console.log(resp)
   }
 }
