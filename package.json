@@ -9,6 +9,7 @@
     "start": "ts-node ./index.ts",
     "dev": "ts-node-dev ./index.ts",
     "build": "tsc --build && pkg . --output cosmos-tower",
+    "build-alpine": "tsc --build && pkg . --targets node18-alpine-x64 --output cosmos-tower",
     "test": "jest"
   },
   "bin": "./build/index.js",
