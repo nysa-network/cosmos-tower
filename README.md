@@ -1,5 +1,7 @@
 # Cosmos tower
 
+![discord image example](/.github/assets/discord-example.png)
+
 ## Installation
 
 ### Create a Discord bot
