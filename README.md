@@ -16,14 +16,6 @@
 7. Create a private channel, and add your bot inside of it
 8. On discord app, go to app testers, and add yourself as a tester.
 
-### Config
-
-1. Setup the default config for your bot
-
-```bash
-cp config.example.yml config.yml
-```
-
 ## Setup wallet
 
 ### Grant `MsgVote` from validator address
@@ -35,3 +27,20 @@ $DAEMON_NAME tx authz grant $GRANTEE generic --msg-type /cosmos.gov.v1beta1.MsgV
 ```
 
 You can use [tfm.com](https://tfm.com/bridge) to send money via ibc to every wallet address
+
+### Config
+
+1. Setup the default config for your bot
+
+```bash
+cp config.example.yml config.yml
+echo '[]' > cosmos-tower.db.json
+```
+
+2. Install [docker](https://docs.docker.com/engine/install/) and [docker-compose]()
+
+3. Start it ! :tada:
+
+```bash
+docker-compose up -d
+```

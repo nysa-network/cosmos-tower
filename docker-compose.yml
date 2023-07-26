@@ -1,0 +1,7 @@
+version: "3"
+services:
+  cosmos-tower:
+    image: ghcr.io/nysa-network/cosmos-tower:latest
+    volumes:
+      - ./config.yml:/config.yml
+      - ./cosmos-tower.db.json:/cosmos-tower.db.json
