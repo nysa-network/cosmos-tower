@@ -118,4 +118,20 @@ export class CosmosChain {
     );
     return resp;
   }
+
+  // @has_voted
+  async has_voted(proposalId: Long): Promise<boolean> {
+    var tmClient = await Tendermint34Client.connect(this.rpc_endpoint);
+    const qclient = QueryClient.withExtensions(tmClient, setupGovExtension);
+
+    try {
+      await qclient.gov.vote(proposalId, this.voter_address);
+      return true;
+    } catch (err) {
+      if (err.message.match(/.*voter: .*not found for proposal:.*/)) {
+        return false;
+      }
+      throw err;
+    }
+  }
 }

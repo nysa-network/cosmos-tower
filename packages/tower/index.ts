@@ -9,6 +9,7 @@ import {
   Interaction,
   Events,
   TextChannel,
+  Options,
 } from "discord.js";
 import { TowerDB } from "./database";
 
@@ -46,11 +47,32 @@ export class Tower {
 
     this.discord = new DiscordClient({
       intents: [],
+      makeCache: Options.cacheWithLimits(Options.DefaultMakeCacheSettings),
     });
   }
 
   async init() {
-    this.discord.on(Events.InteractionCreate, this.onMsgResponse.bind(this));
+    this.discord.on("ready", async (client: DiscordClient) => {
+      await client.channels.fetch(this.config.discord.channel_id);
+    });
+
+    this.discord.on(
+      Events.InteractionCreate,
+      async (interaction: Interaction) => {
+        if (!interaction.isButton()) {
+          return;
+        }
+        try {
+          await this.onMsgResponse(interaction); // .bind(this);
+        } catch (err) {
+          console.error("Catch err: ", err);
+
+          await interaction.editReply({
+            content: `[ERROR]: vote failed: ${err.message}`,
+          });
+        }
+      }
+    );
 
     await this.discord.login(this.config.discord.token);
   }
@@ -70,24 +92,31 @@ export class Tower {
       interaction.reply({ content: `[ERROR] unknown chain` });
       return;
     }
+
     await interaction.deferReply();
 
+    let resp;
     try {
-      const resp = await chain.vote(prop_id as Long, vote);
+      resp = await chain.vote(prop_id as Long, vote);
+    } catch (err) {
+      console.error(err);
+      await interaction.editReply({
+        content: `[ERROR]: vote failed: ${err.message}`,
+      });
+      return;
+    }
 
+    // This piece of code create but when the program has been relaunched...
+    await interaction.message.react("🆗");
+
+    try {
       await interaction.message.fetch();
-      await interaction.message.react("🆗");
 
       await interaction.editReply({
-        content: `Voted! see tx: ${resp.transactionHash}`,
+        content: `Voted ${vote} on ${chain_id} - #${prop_id}, tx: ${resp?.transactionHash}`,
       });
     } catch (err) {
-      console.error(
-        `[ERROR] failed to vote on ${chain_id} #${prop_id}:\n${err}`
-      );
-      await interaction.editReply({
-        content: `[ERROR] Failed to vote: ${err}`,
-      });
+      console.error(err);
     }
   }
 
@@ -99,7 +128,12 @@ export class Tower {
         const proposals = await chain.get_proposals();
 
         for (const p of proposals) {
-          // check if already voted
+          const has_voted = await chain.has_voted(p.proposalId);
+          if (has_voted) {
+            continue;
+          }
+
+          // check if already sent to discord
           console.log(`[DEBUG] ${chain.chain_id} #${p.proposalId}`);
           if (this.towerDB.contain(chain.chain_id, p.proposalId.toNumber())) {
             continue;
