@@ -1,5 +1,6 @@
 database: ./cosmos-tower.db.json
 discord:
+  # discord application bot page, in "bot"
   token: ""
   # discord right click on a channel -> "copy channel id"
   channel_id: ""
